@@ -1,7 +1,6 @@
-# Prediabetes as a risk factor for metabolic disease and
-# cause-specific mortality in 125,442 diabetes-free adults in Mexico City
+# Prediabetes and risk of all-cause and cause-specific mortality: a prospective study of 114,062 adults in Mexico City
 # Data Analysis: Omar Yaxmehen Bello-Chavolla & Carlos A. Fermin-Martinez
-# Latest version of Analysis February 2024
+# Latest version of Analysis February 2025
 # For any question regarding analysis contact:
 # Omar Yaxmehen Bello-Chavolla at oyaxbell@yahoo.com.mx
 
@@ -18,14 +17,14 @@ pacman::p_load(
 
 #### Data set management------------ ####
 #Official working directories:
-setwd("~/OneDrive - UNIVERSIDAD NACIONAL AUTÓNOMA DE MÉXICO/Mexico City Cohort Study")
+setwd("~/Mi unidad (obello@facmed.unam.mx)/Mexico City Cohort Study")
 #setwd("/Users/carlosfermin/Library/CloudStorage/OneDrive-UNIVERSIDADNACIONALAUTÓNOMADEMÉXICO/Mexico City Cohort Study")
 
 ### Load dataset ###
 mcps<-read.csv("Data/2021-004 MCPS BASELINE.csv") %>%
   left_join(read.csv("Data/2022-012 MCPS MORTALITY.csv"), by="PATID") %>%
   left_join(read.csv("Data/2022-012 MCPS RESURVEY.csv"), by="PATID") %>% 
-  left_join(read.csv("Data/2022-012 MCPS BASELINE_NMR_FULLCOHORT.csv"), by="PATID")
+  left_join(read.csv("Data/2022-012_OmarBelloChavolla_NMR_Second_Release-Corrected/2022-012 MCPS BASE_NMR_DATA_RECALIB-corrected.csv"), by="PATID")
 
 ### Recode dataset ###
 #Diabetes
@@ -412,7 +411,7 @@ prevalence_iec<-prev_iec%>%
 fig1<-ggarrange(prevalence_ADA, prevalence_iec, labels = c("A", "B"),
                 font.label = list(size = 16), common.legend = T, legend = "bottom")
 ggsave(fig1, file="Proyectos/Prediabetes/Figure1.tif", bg="transparent",
-         width=25*1.3, height=15*1.3, units=c("cm"), dpi=600, limitsize = FALSE)
+         width=25*1.3, height=15*1.3, units=c("cm"), dpi=300, limitsize = FALSE)
 
 #### SuppFig2: Prediabetes risk by sex--- ####
 # Lexis expansion
@@ -429,23 +428,27 @@ mcps_fin2<- mcps_fin2 %>% rename(
 with(mcps_fin2, list(exit_status, old.death, premature)) %>% sapply(table)
 
 #Deaths at 35-74 years old
+(mcps_fin2 %>% filter(MALE==0 & between(AGE, 35, 74)) %>% 
+  select(premature,hba1c_cat) %>% table)[2,] -> labels_ev3
 m0.4A_female <- coxph(Surv(time_at_entry, time_at_exit, premature)~hba1c_cat+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(age.cat)+cluster(id), data=mcps_fin2 %>% filter(MALE==0))
 m0.4A_female_float <- float(object = m0.4A_female); dfAf <- data.frame(
-  "A1c"=(m0.4A_female_float$coef%>%names), "mean"=m0.4A_female_float$coef,
+  "A1c"=c("<5.7%","≥5.7% to <6.0%","≥6.0% to <6.5%"), "mean"=m0.4A_female_float$coef,
   "Lower"=m0.4A_female_float$coef-qnorm(.975)*(m0.4A_female_float$var %>% sqrt), "Upper"=m0.4A_female_float$coef+qnorm(.975)*(m0.4A_female_float$var %>% sqrt)) %>%
   mutate("HR"=exp(mean), "Lower"=exp(Lower), "Upper"=exp(Upper), "A1c"=ordered(A1c,levels=c("<5.7%","≥5.7% to <6.0%","≥6.0% to <6.5%")), "psize"=1/(mean+1))  %>%
   `rownames<-`(NULL) %>% arrange(A1c) %>% mutate("N"=labels_ev3, "HR2"=sprintf("%#.2f",HR), "Sex"="Females")
 
+(mcps_fin2 %>% filter(MALE==1 & between(AGE, 35, 74)) %>% 
+    select(premature,hba1c_cat) %>% table)[2,] -> labels_ev4
 m0.4A_male <- coxph(Surv(time_at_entry, time_at_exit, premature)~hba1c_cat+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(age.cat)+cluster(id), data=mcps_fin2 %>% filter(MALE==1))
 m0.4A_male_float <- float(object = m0.4A_male); dfAm <- data.frame(
-  "A1c"=(m0.4A_male_float$coef%>%names), "mean"=m0.4A_male_float$coef,
+  "A1c"=c("<5.7%","≥5.7% to <6.0%","≥6.0% to <6.5%"), "mean"=m0.4A_male_float$coef,
   "Lower"=m0.4A_male_float$coef-qnorm(.975)*(m0.4A_male_float$var %>% sqrt), "Upper"=m0.4A_male_float$coef+qnorm(.975)*(m0.4A_male_float$var %>% sqrt)) %>%
-  mutate("HR"=exp(mean), "Lower"=exp(Lower), "Upper"=exp(Upper), "A1c"=ordered(A1c,levels=c("<5.7%","5.7-5.9%","6.0-6.4%")), "psize"=1/(mean+1))  %>%
+  mutate("HR"=exp(mean), "Lower"=exp(Lower), "Upper"=exp(Upper), "A1c"=ordered(A1c,labels=c("<5.7%","≥5.7% to <6.0%","≥6.0% to <6.5%")), "psize"=1/(mean+1))  %>%
   `rownames<-`(NULL) %>% arrange(A1c) %>% mutate("N"=labels_ev4, "HR2"=sprintf("%#.2f",HR), "Sex"="Males")
 
 rbind(dfAf, dfAm) %>%
   ggplot(aes(x=A1c,color=A1c,y=HR,ymin=Lower,ymax=Upper,size=psize)) + geom_hline(yintercept = 1, linetype=2) +
-  geom_pointrange(shape=15) + facet_wrap(~Age, nrow=1, ncol=3) + coord_cartesian(ylim=c((0.85),(1.75))) +
+  geom_pointrange(shape=15) + facet_wrap(~Sex, nrow=1, ncol=3) + coord_cartesian(ylim=c((0.85),(1.75))) +
   scale_color_manual(values = wes_palette("Zissou1", 3)) + theme_bw() + scale_size_continuous(guide="none", range = c(0.7,1.3)) +
   labs(color="HbA1c", y="Mortality Rate Ratio (95%CI)", x="\nHbA1c category", title=NULL) +
   scale_y_continuous(trans = scales::log_trans()) +facet_wrap(~Sex)+
@@ -457,18 +460,22 @@ rbind(dfAf, dfAm) %>%
   geom_text(aes(x=A1c,y=Lower,label=N), color="black", nudge_x=0, nudge_y=-0.025, size=2.75) -> fs2b.f; fs2b.f
 
 #Deaths at ≥75 years old
+(mcps_fin2 %>% filter(MALE==0 & age_risk>=75) %>% 
+    select(old.death,hba1c_cat) %>% table)[2,] -> labels_ev5
 m0.4A_female <- coxph(Surv(time_at_entry, time_at_exit, old.death)~hba1c_cat+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(age.cat)+cluster(id), data=mcps_fin2 %>% filter(MALE==0))
 m0.4A_female_float <- float(object = m0.4A_female); dfAf_o <- data.frame(
-  "A1c"=(m0.4A_female_float$coef%>%names), "mean"=m0.4A_female_float$coef,
+  "A1c"=c("<5.7%","≥5.7% to <6.0%","≥6.0% to <6.5%"), "mean"=m0.4A_female_float$coef,
   "Lower"=m0.4A_female_float$coef-qnorm(.975)*(m0.4A_female_float$var %>% sqrt), "Upper"=m0.4A_female_float$coef+qnorm(.975)*(m0.4A_female_float$var %>% sqrt)) %>%
-  mutate("HR"=exp(mean), "Lower"=exp(Lower), "Upper"=exp(Upper), "A1c"=ordered(A1c,levels=c("<5.7%","5.7-5.9%","6.0-6.4%")), "psize"=1/(mean+1))  %>%
+  mutate("HR"=exp(mean), "Lower"=exp(Lower), "Upper"=exp(Upper), "A1c"=ordered(A1c,labels=c("<5.7%","≥5.7% to <6.0%","≥6.0% to <6.5%")), "psize"=1/(mean+1))  %>%
   `rownames<-`(NULL) %>% arrange(A1c) %>% mutate("N"=labels_ev5, "HR2"=sprintf("%#.2f",HR), "Sex"="Females")
 
+(mcps_fin2 %>% filter(MALE==1 & age_risk>=75) %>% 
+    select(old.death,hba1c_cat) %>% table)[2,] -> labels_ev6
 m0.4A_male <- coxph(Surv(time_at_entry, time_at_exit, old.death)~hba1c_cat+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(age.cat)+cluster(id), data=mcps_fin2 %>% filter(MALE==1))
 m0.4A_male_float <- float(object = m0.4A_male); dfAm_o <- data.frame(
-  "A1c"=(m0.4A_male_float$coef%>%names), "mean"=m0.4A_male_float$coef,
+  "A1c"=c("<5.7%","≥5.7% to <6.0%","≥6.0% to <6.5%"), "mean"=m0.4A_male_float$coef,
   "Lower"=m0.4A_male_float$coef-qnorm(.975)*(m0.4A_male_float$var %>% sqrt), "Upper"=m0.4A_male_float$coef+qnorm(.975)*(m0.4A_male_float$var %>% sqrt)) %>%
-  mutate("HR"=exp(mean), "Lower"=exp(Lower), "Upper"=exp(Upper), "A1c"=ordered(A1c,levels=c("<5.7%","5.7-5.9%","6.0-6.4%")), "psize"=1/(mean+1))  %>%
+  mutate("HR"=exp(mean), "Lower"=exp(Lower), "Upper"=exp(Upper), "A1c"=ordered(A1c,labels=c("<5.7%","≥5.7% to <6.0%","≥6.0% to <6.5%")), "psize"=1/(mean+1))  %>%
   `rownames<-`(NULL) %>% arrange(A1c) %>% mutate("N"=labels_ev6, "HR2"=sprintf("%#.2f",HR), "Sex"="Males")
 
 rbind(dfAf_o, dfAm_o) %>%
@@ -952,7 +959,7 @@ m0.4B_float <- float(object = m0.4B); dfB <- data.frame(
 
 #### Build figure 2
 fig2 <- ggarrange(print(f2a.1), f2b.1, nrow=1, ncol=2, labels=c("A","B"), font.label = list(size = 17)) 
-ggsave(fig2, file="Proyectos/Prediabetes/Figure2.tif", bg="white", width=30*1.3, height=15*1.5, units=c("cm"), dpi=600, limitsize = FALSE)
+ggsave(fig2, file="Proyectos/Prediabetes/Figure2.tif", bg="white", width=30*1.3, height=15*1.5, units=c("cm"), dpi=300, limitsize = FALSE)
 
 #### Build figure 2
 supp2 <- ggarrange(print(f2a.2), f2b.2, nrow=1, ncol=2, labels=c("A","B"), font.label = list(size = 17)) %>%
@@ -1044,7 +1051,7 @@ test_rcs4 %>% summary
 test_rcs5 %>% summary
 
 
-#### SuppTab2: Deaths at 35-74y -------------- ####
+#### Tab2: Deaths at 35-74y -------------- ####
 ### Lexis expansion ###
 mcps_fin <- mcps_fin %>% mutate("date_recruited" = decimal_date(ym(paste0(YEAR_RECRUITED, MONTH_RECRUITED))))
 mcps_lexis <- Lexis(entry = list("period" = date_recruited, "age" = AGE, "time_at_entry" = 0),
@@ -1064,6 +1071,9 @@ mcps_fin2$pred_ADA <-mcps_fin2$predm; mcps_fin2$pred_IEC <-mcps_fin2$predm_ice
 mcps_fin2$LDL <- mcps_fin2$Clinical_LDL_C; mcps_fin2$HDL <- mcps_fin2$HDL_C
 mcps_fin2$SBP <- mcps_fin2$SBP1; mcps_fin2$DBP <- mcps_fin2$DBP1
 mcps_fin2$TG <- mcps_fin2$Total_TG
+
+mcps_fin2<- mcps_fin2 %>% filter(Clinical_LDL_C>0, Total_TG>0, HDL_C>0)
+
 #Sex, municipality
 m0<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
 m0.5<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
@@ -1076,18 +1086,18 @@ m0.5_adj1<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + EDU
 m1_adj1<-coxph(Surv(time_at_entry, time_at_exit, premature)~hba1c_cat  + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
 m2_adj1<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_ADA   + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
 m3_adj1<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_IEC   + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
-#Sex, municipality, educational level, lifestyle, BP, lipids
-m0_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
-m0.5_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
-m1_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~hba1c_cat  + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
-m2_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_ADA   + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
-m3_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_IEC   + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+#Sex, municipality, educational level, lifestyle, adiposity
+m0_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C  +BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2)
+m0.5_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+m1_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~hba1c_cat   +BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2)
+m2_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_ADA    +BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2)
+m3_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_IEC    +BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2)
 #Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
-m0_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2)
-m0.5_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
-m1_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~hba1c_cat   +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2)
-m2_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_ADA    +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2)
-m3_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_IEC    +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2)
+m0_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C + BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m0.5_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+m1_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~hba1c_cat  + BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m2_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_ADA   + BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m3_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_IEC   + BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
 
 ### Table quick ###
 quicktab <- function(a,b,c,d,x){
@@ -1103,8 +1113,8 @@ quicktab <- function(a,b,c,d,x){
 qt1 <- data.frame(
   quicktab(m0.5, m1, m2, m3, "Baseline"),
   quicktab(m0.5_adj1, m1_adj1, m2_adj1, m3_adj1, "Lifestyle"),
-  quicktab(m0.5_adj2, m1_adj2, m2_adj2, m3_adj2, "BP_Lipids"),
-  quicktab(m0.5_adj3, m1_adj3, m2_adj3, m3_adj3, "Adiposity")
+  quicktab(m0.5_adj2, m1_adj2, m2_adj2, m3_adj2, "Adiposity"),
+  quicktab(m0.5_adj3, m1_adj3, m2_adj3, m3_adj3, "Adiposity + BP/Lipids")
   ); rbind(qt1[1,], "1.00", qt1[2:5,]) %>%
   `rownames<-`(c("HbA1c (%)", "<5.7%", "5.7-5.9%", "6.0-6.4%",
                  "ADA (5.7-6.4%)", "IEC (6.0-6.4%)")) %>% View
@@ -1194,11 +1204,11 @@ m1_adj1<-coxph(Surv(time_at_entry, time_at_exit, premature)~hba1c_cat  + EDU_LEV
 m2_adj1<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_ADA   + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
 m3_adj1<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_IEC   + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
 #Sex, municipality, educational level, lifestyle, BP, lipids
-m0_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
-m0.5_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
-m1_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~hba1c_cat  + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
-m2_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_ADA   + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
-m3_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_IEC   + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m0_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C + BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m0.5_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+m1_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~hba1c_cat  + BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m2_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_ADA   + BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m3_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~pred_IEC   + BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
 #Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
 m0_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2)
 m0.5_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+n_comorb+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
@@ -1220,8 +1230,8 @@ quicktab <- function(a,b,c,d,x){
 qt1 <- data.frame(
   quicktab(m0.5, m1, m2, m3, "Baseline"),
   quicktab(m0.5_adj1, m1_adj1, m2_adj1, m3_adj1, "Lifestyle"),
-  quicktab(m0.5_adj2, m1_adj2, m2_adj2, m3_adj2, "BP_Lipids"),
-  quicktab(m0.5_adj3, m1_adj3, m2_adj3, m3_adj3, "Adiposity")
+  quicktab(m0.5_adj2, m1_adj2, m2_adj2, m3_adj2, "Adiposity"),
+  quicktab(m0.5_adj3, m1_adj3, m2_adj3, m3_adj3, "Adiposity + BP/Lipids")
 ); rbind(qt1[1,], "1.00", qt1[2:5,]) %>%
   `rownames<-`(c("HbA1c (%)", "<5.7%", "5.7-5.9%", "6.0-6.4%",
                  "ADA (5.7-6.4%)", "IEC (6.0-6.4%)")) %>% View
@@ -1306,11 +1316,11 @@ m1_adj1<-coxph(Surv(time_at_entry, time_at_exit, old.death)~hba1c_cat  + EDU_LEV
 m2_adj1<-coxph(Surv(time_at_entry, time_at_exit, old.death)~pred_ADA   + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
 m3_adj1<-coxph(Surv(time_at_entry, time_at_exit, old.death)~pred_IEC   + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
 #Sex, municipality, educational level, lifestyle, BP, lipids
-m0_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
-m0.5_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
-m1_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~hba1c_cat  + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
-m2_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~pred_ADA   + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
-m3_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~pred_IEC   + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m0_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C + BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m0.5_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+m1_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~hba1c_cat  + BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m2_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~pred_ADA   + BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
+m3_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~pred_IEC   + BMI+scale(ICE)+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2)
 #Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
 m0_adj3<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2)
 m0.5_adj3<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
@@ -1332,8 +1342,8 @@ quicktab <- function(a,b,c,d,x){
 qt1 <- data.frame(
   quicktab(m0.5, m1, m2, m3, "Baseline"),
   quicktab(m0.5_adj1, m1_adj1, m2_adj1, m3_adj1, "Lifestyle"),
-  quicktab(m0.5_adj2, m1_adj2, m2_adj2, m3_adj2, "BP_Lipids"),
-  quicktab(m0.5_adj3, m1_adj3, m2_adj3, m3_adj3, "Adiposity")
+  quicktab(m0.5_adj2, m1_adj2, m2_adj2, m3_adj2, "Adiposity"),
+  quicktab(m0.5_adj3, m1_adj3, m2_adj3, m3_adj3, "Adiposity + BP/Lipids")
 ); rbind(qt1[1,], "1.00", qt1[2:5,]) %>%
   `rownames<-`(c("HbA1c (%)", "<5.7%", "5.7-5.9%", "6.0-6.4%",
                  "ADA (5.7-6.4%)", "IEC (6.0-6.4%)")) %>% View
@@ -1379,7 +1389,7 @@ qt1 <- data.frame(
 #doc <- read_docx() %>% body_add_flextable(value = tab2, split = TRUE) %>%  body_end_section_landscape() %>%
 #  print(target = "Proyectos/Prediabetes/tabla_supp1.docx"); remove(row0, row1, row2, row3, results, mcps_fin2)
 
-#### SuppTab5: sample size and deaths table--- ####
+#### SuppTab6: sample size and deaths table--- ####
 #DC revision: Sample size and deaths for each stratum
 # Lexis expansion
 remove(mcps_lexis, mcps_fin2)
@@ -2056,7 +2066,327 @@ gp1 <- gpar(fill="#5697AF"); gp2 <- gpar(fill="#E7CD4F"); F.TAB <- rbind(
 png("Proyectos/Prediabetes/FSupp5.png", width=27, height=40.5, units = "cm", res = 300); forest2
 dev.off(); print(plot(1))
 
-#### Table  2: Excess risk (deaths at 40-74y)----------- ####
+#### SuppTab5: Continous HbA1c and Deaths at 35-74y and ≥75y -------------- ####
+### All-cause deaths ###
+mcps_fin <- mcps_fin %>% mutate("date_recruited" = decimal_date(ym(paste0(YEAR_RECRUITED, MONTH_RECRUITED))))
+mcps_lexis <- Lexis(entry = list("period" = date_recruited, "age" = AGE, "time_at_entry" = 0),
+                    exit = list("period" = date_recruited + PERSON_YEARS), exit.status = D000, data = mcps_fin)
+mcps_fin2<-splitLexis(mcps_lexis, breaks=c(35,40,45,50,55,60,65,70,75,80,85), time.scale = "age")
+mcps_fin2$ageout<-mcps_fin2$age+mcps_fin2$lex.dur; mcps_fin2$age.cat <- timeBand(mcps_fin2, "age", type = "factor")
+mcps_fin2$premature<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$premature[mcps_fin2$premature==1 & mcps_fin2$ageout>=75]<-0 #Deaths 35-74
+mcps_fin2$old.death<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$old.death[mcps_fin2$old.death==1 & mcps_fin2$ageout<75]<-0 #Deaths ≥75
+mcps_fin2<- mcps_fin2 %>% rename(
+  "id" = lex.id, "fu_period" = lex.dur, "entry_status" = lex.Cst, "exit_status" = lex.Xst) %>%
+  mutate("time_at_exit" = time_at_entry + fu_period, "age_at_exit" = age + fu_period)
+with(mcps_fin2, list(exit_status, old.death, premature)) %>% sapply(table)
+
+### Cox models ###
+#Recode
+mcps_fin2$pred_ADA <-mcps_fin2$predm; mcps_fin2$pred_IEC <-mcps_fin2$predm_ice
+mcps_fin2$LDL <- mcps_fin2$Clinical_LDL_C; mcps_fin2$HDL <- mcps_fin2$HDL_C
+mcps_fin2$SBP <- mcps_fin2$SBP1; mcps_fin2$DBP <- mcps_fin2$DBP1
+mcps_fin2$TG <- mcps_fin2$Total_TG
+#Sex, municipality
+m0.5<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle
+m0.5_adj1<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj1<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids
+m0.5_adj2<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj2<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
+m0.5_adj3<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj3<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+
+### Cardiac deaths ###
+mcps_fin <- mcps_fin %>% mutate("date_recruited" = decimal_date(ym(paste0(YEAR_RECRUITED, MONTH_RECRUITED))))
+mcps_lexis <- Lexis(entry = list("period" = date_recruited, "age" = AGE, "time_at_entry" = 0),
+                    exit = list("period" = date_recruited + PERSON_YEARS), exit.status = D003, data = mcps_fin)
+mcps_fin2<-splitLexis(mcps_lexis, breaks=c(35,40,45,50,55,60,65,70,75,80,85), time.scale = "age")
+mcps_fin2$ageout<-mcps_fin2$age+mcps_fin2$lex.dur; mcps_fin2$age.cat <- timeBand(mcps_fin2, "age", type = "factor")
+mcps_fin2$premature<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$premature[mcps_fin2$premature==1 & mcps_fin2$ageout>=75]<-0 #Deaths 35-74
+mcps_fin2$old.death<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$old.death[mcps_fin2$old.death==1 & mcps_fin2$ageout<75]<-0 #Deaths ≥75
+mcps_fin2<- mcps_fin2 %>% rename(
+  "id" = lex.id, "fu_period" = lex.dur, "entry_status" = lex.Cst, "exit_status" = lex.Xst) %>%
+  mutate("time_at_exit" = time_at_entry + fu_period, "age_at_exit" = age + fu_period)
+with(mcps_fin2, list(exit_status, old.death, premature)) %>% sapply(table)
+
+### Cox models ###
+#Recode
+mcps_fin2$pred_ADA <-mcps_fin2$predm; mcps_fin2$pred_IEC <-mcps_fin2$predm_ice
+mcps_fin2$LDL <- mcps_fin2$Clinical_LDL_C; mcps_fin2$HDL <- mcps_fin2$HDL_C
+mcps_fin2$SBP <- mcps_fin2$SBP1; mcps_fin2$DBP <- mcps_fin2$DBP1
+mcps_fin2$TG <- mcps_fin2$Total_TG
+#Sex, municipality
+m0.5c<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5c<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle
+m0.5_adj1c<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj1c<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids
+m0.5_adj2c<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj2c<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
+m0.5_adj3c<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj3c<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+
+### Cerebrovascular deaths ###
+mcps_fin <- mcps_fin %>% mutate("date_recruited" = decimal_date(ym(paste0(YEAR_RECRUITED, MONTH_RECRUITED))))
+mcps_lexis <- Lexis(entry = list("period" = date_recruited, "age" = AGE, "time_at_entry" = 0),
+                    exit = list("period" = date_recruited + PERSON_YEARS), exit.status = D008, data = mcps_fin)
+mcps_fin2<-splitLexis(mcps_lexis, breaks=c(35,40,45,50,55,60,65,70,75,80,85), time.scale = "age")
+mcps_fin2$ageout<-mcps_fin2$age+mcps_fin2$lex.dur; mcps_fin2$age.cat <- timeBand(mcps_fin2, "age", type = "factor")
+mcps_fin2$premature<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$premature[mcps_fin2$premature==1 & mcps_fin2$ageout>=75]<-0 #Deaths 35-74
+mcps_fin2$old.death<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$old.death[mcps_fin2$old.death==1 & mcps_fin2$ageout<75]<-0 #Deaths ≥75
+mcps_fin2<- mcps_fin2 %>% rename(
+  "id" = lex.id, "fu_period" = lex.dur, "entry_status" = lex.Cst, "exit_status" = lex.Xst) %>%
+  mutate("time_at_exit" = time_at_entry + fu_period, "age_at_exit" = age + fu_period)
+with(mcps_fin2, list(exit_status, old.death, premature)) %>% sapply(table)
+
+### Cox models ###
+#Recode
+mcps_fin2$pred_ADA <-mcps_fin2$predm; mcps_fin2$pred_IEC <-mcps_fin2$predm_ice
+mcps_fin2$LDL <- mcps_fin2$Clinical_LDL_C; mcps_fin2$HDL <- mcps_fin2$HDL_C
+mcps_fin2$SBP <- mcps_fin2$SBP1; mcps_fin2$DBP <- mcps_fin2$DBP1
+mcps_fin2$TG <- mcps_fin2$Total_TG
+#Sex, municipality
+m0.5s<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5s<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle
+m0.5_adj1s<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj1s<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids
+m0.5_adj2s<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj2s<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
+m0.5_adj3s<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj3s<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+
+### Other vascular deaths ###
+mcps_fin <- mcps_fin %>% mutate("date_recruited" = decimal_date(ym(paste0(YEAR_RECRUITED, MONTH_RECRUITED))))
+mcps_lexis <- Lexis(entry = list("period" = date_recruited, "age" = AGE, "time_at_entry" = 0),
+                    exit = list("period" = date_recruited + PERSON_YEARS), exit.status = D014, data = mcps_fin)
+mcps_fin2<-splitLexis(mcps_lexis, breaks=c(35,40,45,50,55,60,65,70,75,80,85), time.scale = "age")
+mcps_fin2$ageout<-mcps_fin2$age+mcps_fin2$lex.dur; mcps_fin2$age.cat <- timeBand(mcps_fin2, "age", type = "factor")
+mcps_fin2$premature<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$premature[mcps_fin2$premature==1 & mcps_fin2$ageout>=75]<-0 #Deaths 35-74
+mcps_fin2$old.death<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$old.death[mcps_fin2$old.death==1 & mcps_fin2$ageout<75]<-0 #Deaths ≥75
+mcps_fin2<- mcps_fin2 %>% rename(
+  "id" = lex.id, "fu_period" = lex.dur, "entry_status" = lex.Cst, "exit_status" = lex.Xst) %>%
+  mutate("time_at_exit" = time_at_entry + fu_period, "age_at_exit" = age + fu_period)
+with(mcps_fin2, list(exit_status, old.death, premature)) %>% sapply(table)
+
+### Cox models ###
+#Recode
+mcps_fin2$pred_ADA <-mcps_fin2$predm; mcps_fin2$pred_IEC <-mcps_fin2$predm_ice
+mcps_fin2$LDL <- mcps_fin2$Clinical_LDL_C; mcps_fin2$HDL <- mcps_fin2$HDL_C
+mcps_fin2$SBP <- mcps_fin2$SBP1; mcps_fin2$DBP <- mcps_fin2$DBP1
+mcps_fin2$TG <- mcps_fin2$Total_TG
+#Sex, municipality
+m0.5ov<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5ov<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle
+m0.5_adj1ov<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj1ov<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids
+m0.5_adj2ov<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj2ov<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
+m0.5_adj3ov<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj3ov<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+
+### Cardiovascular deaths ###
+mcps_fin <- mcps_fin %>% mutate("date_recruited" = decimal_date(ym(paste0(YEAR_RECRUITED, MONTH_RECRUITED))))
+mcps_lexis <- Lexis(entry = list("period" = date_recruited, "age" = AGE, "time_at_entry" = 0),
+                    exit = list("period" = date_recruited + PERSON_YEARS), exit.status = D003+D008+D014, data = mcps_fin)
+mcps_fin2<-splitLexis(mcps_lexis, breaks=c(35,40,45,50,55,60,65,70,75,80,85), time.scale = "age")
+mcps_fin2$ageout<-mcps_fin2$age+mcps_fin2$lex.dur; mcps_fin2$age.cat <- timeBand(mcps_fin2, "age", type = "factor")
+mcps_fin2$premature<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$premature[mcps_fin2$premature==1 & mcps_fin2$ageout>=75]<-0 #Deaths 35-74
+mcps_fin2$old.death<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$old.death[mcps_fin2$old.death==1 & mcps_fin2$ageout<75]<-0 #Deaths ≥75
+mcps_fin2<- mcps_fin2 %>% rename(
+  "id" = lex.id, "fu_period" = lex.dur, "entry_status" = lex.Cst, "exit_status" = lex.Xst) %>%
+  mutate("time_at_exit" = time_at_entry + fu_period, "age_at_exit" = age + fu_period)
+with(mcps_fin2, list(exit_status, old.death, premature)) %>% sapply(table)
+
+### Cox models ###
+#Recode
+mcps_fin2$pred_ADA <-mcps_fin2$predm; mcps_fin2$pred_IEC <-mcps_fin2$predm_ice
+mcps_fin2$LDL <- mcps_fin2$Clinical_LDL_C; mcps_fin2$HDL <- mcps_fin2$HDL_C
+mcps_fin2$SBP <- mcps_fin2$SBP1; mcps_fin2$DBP <- mcps_fin2$DBP1
+mcps_fin2$TG <- mcps_fin2$Total_TG
+#Sex, municipality
+m0.5cvd<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5cvd<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle
+m0.5_adj1cvd<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj1cvd<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids
+m0.5_adj2cvd<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj2cvd<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
+m0.5_adj3cvd<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj3cvd<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+
+### Renal deaths ###
+mcps_fin <- mcps_fin %>% mutate("date_recruited" = decimal_date(ym(paste0(YEAR_RECRUITED, MONTH_RECRUITED))))
+mcps_lexis <- Lexis(entry = list("period" = date_recruited, "age" = AGE, "time_at_entry" = 0),
+                    exit = list("period" = date_recruited + PERSON_YEARS), exit.status = D019, data = mcps_fin)
+mcps_fin2<-splitLexis(mcps_lexis, breaks=c(35,40,45,50,55,60,65,70,75,80,85), time.scale = "age")
+mcps_fin2$ageout<-mcps_fin2$age+mcps_fin2$lex.dur; mcps_fin2$age.cat <- timeBand(mcps_fin2, "age", type = "factor")
+mcps_fin2$premature<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$premature[mcps_fin2$premature==1 & mcps_fin2$ageout>=75]<-0 #Deaths 35-74
+mcps_fin2$old.death<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$old.death[mcps_fin2$old.death==1 & mcps_fin2$ageout<75]<-0 #Deaths ≥75
+mcps_fin2<- mcps_fin2 %>% rename(
+  "id" = lex.id, "fu_period" = lex.dur, "entry_status" = lex.Cst, "exit_status" = lex.Xst) %>%
+  mutate("time_at_exit" = time_at_entry + fu_period, "age_at_exit" = age + fu_period)
+with(mcps_fin2, list(exit_status, old.death, premature)) %>% sapply(table)
+
+### Cox models ###
+#Recode
+mcps_fin2$pred_ADA <-mcps_fin2$predm; mcps_fin2$pred_IEC <-mcps_fin2$predm_ice
+mcps_fin2$LDL <- mcps_fin2$Clinical_LDL_C; mcps_fin2$HDL <- mcps_fin2$HDL_C
+mcps_fin2$SBP <- mcps_fin2$SBP1; mcps_fin2$DBP <- mcps_fin2$DBP1
+mcps_fin2$TG <- mcps_fin2$Total_TG
+#Sex, municipality
+m0.5k<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5k<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle
+m0.5_adj1k<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj1k<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids
+m0.5_adj2k<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj2k<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
+m0.5_adj3k<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj3k<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+
+### Acute diabetic deaths ###
+mcps_fin <- mcps_fin %>% mutate("date_recruited" = decimal_date(ym(paste0(YEAR_RECRUITED, MONTH_RECRUITED))))
+mcps_lexis <- Lexis(entry = list("period" = date_recruited, "age" = AGE, "time_at_entry" = 0),
+                    exit = list("period" = date_recruited + PERSON_YEARS), exit.status = D023, data = mcps_fin)
+mcps_fin2<-splitLexis(mcps_lexis, breaks=c(35,40,45,50,55,60,65,70,75,80,85), time.scale = "age")
+mcps_fin2$ageout<-mcps_fin2$age+mcps_fin2$lex.dur; mcps_fin2$age.cat <- timeBand(mcps_fin2, "age", type = "factor")
+mcps_fin2$premature<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$premature[mcps_fin2$premature==1 & mcps_fin2$ageout>=75]<-0 #Deaths 35-74
+mcps_fin2$old.death<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$old.death[mcps_fin2$old.death==1 & mcps_fin2$ageout<75]<-0 #Deaths ≥75
+mcps_fin2<- mcps_fin2 %>% rename(
+  "id" = lex.id, "fu_period" = lex.dur, "entry_status" = lex.Cst, "exit_status" = lex.Xst) %>%
+  mutate("time_at_exit" = time_at_entry + fu_period, "age_at_exit" = age + fu_period)
+with(mcps_fin2, list(exit_status, old.death, premature)) %>% sapply(table)
+
+### Cox models ###
+#Recode
+mcps_fin2$pred_ADA <-mcps_fin2$predm; mcps_fin2$pred_IEC <-mcps_fin2$predm_ice
+mcps_fin2$LDL <- mcps_fin2$Clinical_LDL_C; mcps_fin2$HDL <- mcps_fin2$HDL_C
+mcps_fin2$SBP <- mcps_fin2$SBP1; mcps_fin2$DBP <- mcps_fin2$DBP1
+mcps_fin2$TG <- mcps_fin2$Total_TG
+#Sex, municipality
+m0.5d<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5d<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle
+m0.5_adj1d<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj1d<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids
+m0.5_adj2d<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj2d<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
+m0.5_adj3d<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj3d<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+
+### Neoplastic deaths ###
+mcps_fin <- mcps_fin %>% mutate("date_recruited" = decimal_date(ym(paste0(YEAR_RECRUITED, MONTH_RECRUITED))))
+mcps_lexis <- Lexis(entry = list("period" = date_recruited, "age" = AGE, "time_at_entry" = 0),
+                    exit = list("period" = date_recruited + PERSON_YEARS), exit.status = D040, data = mcps_fin)
+mcps_fin2<-splitLexis(mcps_lexis, breaks=c(35,40,45,50,55,60,65,70,75,80,85), time.scale = "age")
+mcps_fin2$ageout<-mcps_fin2$age+mcps_fin2$lex.dur; mcps_fin2$age.cat <- timeBand(mcps_fin2, "age", type = "factor")
+mcps_fin2$premature<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$premature[mcps_fin2$premature==1 & mcps_fin2$ageout>=75]<-0 #Deaths 35-74
+mcps_fin2$old.death<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$old.death[mcps_fin2$old.death==1 & mcps_fin2$ageout<75]<-0 #Deaths ≥75
+mcps_fin2<- mcps_fin2 %>% rename(
+  "id" = lex.id, "fu_period" = lex.dur, "entry_status" = lex.Cst, "exit_status" = lex.Xst) %>%
+  mutate("time_at_exit" = time_at_entry + fu_period, "age_at_exit" = age + fu_period)
+with(mcps_fin2, list(exit_status, old.death, premature)) %>% sapply(table)
+
+### Cox models ###
+#Recode
+mcps_fin2$pred_ADA <-mcps_fin2$predm; mcps_fin2$pred_IEC <-mcps_fin2$predm_ice
+mcps_fin2$LDL <- mcps_fin2$Clinical_LDL_C; mcps_fin2$HDL <- mcps_fin2$HDL_C
+mcps_fin2$SBP <- mcps_fin2$SBP1; mcps_fin2$DBP <- mcps_fin2$DBP1
+mcps_fin2$TG <- mcps_fin2$Total_TG
+#Sex, municipality
+m0.5n<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5n<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle
+m0.5_adj1n<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj1n<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids
+m0.5_adj2n<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj2n<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
+m0.5_adj3n<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj3n<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+
+### Respiratory deaths ###
+mcps_fin <- mcps_fin %>% mutate("date_recruited" = decimal_date(ym(paste0(YEAR_RECRUITED, MONTH_RECRUITED))))
+mcps_lexis <- Lexis(entry = list("period" = date_recruited, "age" = AGE, "time_at_entry" = 0),
+                    exit = list("period" = date_recruited + PERSON_YEARS), exit.status = D044, data = mcps_fin)
+mcps_fin2<-splitLexis(mcps_lexis, breaks=c(35,40,45,50,55,60,65,70,75,80,85), time.scale = "age")
+mcps_fin2$ageout<-mcps_fin2$age+mcps_fin2$lex.dur; mcps_fin2$age.cat <- timeBand(mcps_fin2, "age", type = "factor")
+mcps_fin2$premature<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$premature[mcps_fin2$premature==1 & mcps_fin2$ageout>=75]<-0 #Deaths 35-74
+mcps_fin2$old.death<-ifelse(mcps_fin2$lex.Xst==T,1,0); mcps_fin2$old.death[mcps_fin2$old.death==1 & mcps_fin2$ageout<75]<-0 #Deaths ≥75
+mcps_fin2<- mcps_fin2 %>% rename(
+  "id" = lex.id, "fu_period" = lex.dur, "entry_status" = lex.Cst, "exit_status" = lex.Xst) %>%
+  mutate("time_at_exit" = time_at_entry + fu_period, "age_at_exit" = age + fu_period)
+with(mcps_fin2, list(exit_status, old.death, premature)) %>% sapply(table)
+
+### Cox models ###
+#Recode
+mcps_fin2$pred_ADA <-mcps_fin2$predm; mcps_fin2$pred_IEC <-mcps_fin2$predm_ice
+mcps_fin2$LDL <- mcps_fin2$Clinical_LDL_C; mcps_fin2$HDL <- mcps_fin2$HDL_C
+mcps_fin2$SBP <- mcps_fin2$SBP1; mcps_fin2$DBP <- mcps_fin2$DBP1
+mcps_fin2$TG <- mcps_fin2$Total_TG
+#Sex, municipality
+m0.5r<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5r<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle
+m0.5_adj1r<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj1r<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids
+m0.5_adj2r<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj2r<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5 + SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+strata(age.cat)+cluster(id), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+#Sex, municipality, educational level, lifestyle, BP, lipids, adiposity
+m0.5_adj3r<-coxph(Surv(time_at_entry, time_at_exit, premature)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+om0.5_adj3r<-coxph(Surv(time_at_entry, time_at_exit, old.death)~BASE_HBA1C.5  +BMI+scale(ICE)+SBP+DBP+LDL+HDL+TG+EDU_LEVEL+factor(PHYSGP)+factor(SMOKEGP)+factor(ALCGP)+COYOACAN+strata(MALE)+cluster(id)+strata(age.cat), data=mcps_fin2 %>% mutate(BASE_HBA1C.5=BASE_HBA1C/0.5))
+
+
+
+### Table quick ###
+quicktab <- function(a,b,c,d,e,f,g,h,i,x){
+  rbind(
+    (a %>% summary)$conf.int[1,c(1,3:4)] %>% sprintf(fmt="%#.2f"),
+    (b %>% summary)$conf.int[1,c(1,3:4)] %>% sprintf(fmt="%#.2f"),
+    (c %>% summary)$conf.int[1,c(1,3:4)] %>% sprintf(fmt="%#.2f"),
+    (d %>% summary)$conf.int[1,c(1,3:4)] %>% sprintf(fmt="%#.2f"),
+    (e %>% summary)$conf.int[1,c(1,3:4)] %>% sprintf(fmt="%#.2f"),
+    (f %>% summary)$conf.int[1,c(1,3:4)] %>% sprintf(fmt="%#.2f"),
+    (g %>% summary)$conf.int[1,c(1,3:4)] %>% sprintf(fmt="%#.2f"),
+    (h %>% summary)$conf.int[1,c(1,3:4)] %>% sprintf(fmt="%#.2f"),
+    (i %>% summary)$conf.int[1,c(1,3:4)] %>% sprintf(fmt="%#.2f")) %>%
+    as.data.frame %>% `names<-`(LETTERS[1:3]) %>%
+    transmute(A=paste0(A, " (", B, ", ", C, ")")) %>% `names<-`(x)}
+
+qt1 <- data.frame("Outcome"=c("All-cause deaths", "Cardiac deaths", "Cerebrovascular deaths", "Other vascular","Cardiovascular deaths",
+                 "Renal deaths", "Acute diabetic deaths", "Neoplastic deahts", "Respiratory deaths"),
+                 quicktab(m0.5, m0.5c, m0.5s, m0.5ov,m0.5cvd,m0.5k,m0.5d,m0.5n,m0.5r, "Baseline"),
+                 quicktab(m0.5_adj1, m0.5_adj1c, m0.5_adj1s, m0.5_adj1ov,m0.5_adj1cvd,m0.5_adj1k,m0.5_adj1d,m0.5_adj1n,m0.5_adj1r, "Lifestyle"),
+                 quicktab(m0.5_adj2, m0.5_adj2c, m0.5_adj2s, m0.5_adj2ov,m0.5_adj2cvd,m0.5_adj2k,m0.5_adj2d,m0.5_adj2n,m0.5_adj2r, "BP+Lipids"),
+                 quicktab(m0.5_adj3, m0.5_adj3c, m0.5_adj3s, m0.5_adj3ov,m0.5_adj3cvd,m0.5_adj3k,m0.5_adj3d,m0.5_adj3n,m0.5_adj3r, "Adiposity"),
+                 quicktab(om0.5, om0.5c, om0.5s, om0.5ov,om0.5cvd,om0.5k,om0.5d,om0.5n,om0.5r, "Baseline"),
+                 quicktab(om0.5_adj1, om0.5_adj1c, om0.5_adj1s, om0.5_adj1ov,om0.5_adj1cvd,om0.5_adj1k,om0.5_adj1d,om0.5_adj1n,om0.5_adj1r, "Lifestyle"),
+                 quicktab(om0.5_adj2, om0.5_adj2c, om0.5_adj2s, om0.5_adj2ov,om0.5_adj2cvd,om0.5_adj2k,om0.5_adj2d,om0.5_adj2n,om0.5_adj2r, "BP+Lipids"),
+                 quicktab(om0.5_adj3, om0.5_adj3c, om0.5_adj3s, om0.5_adj3ov,om0.5_adj3cvd,om0.5_adj3k,om0.5_adj3d,om0.5_adj3n,om0.5_adj3r, "Adiposity")) %>% flextable() %>% align(align = "center",part = "all") %>% autofit()
+
+doc <- read_docx() %>% body_add_flextable(value = qt1, split = TRUE) %>%  body_end_section_landscape() %>%
+ print(target = "Proyectos/Prediabetes/tablaS5.1.docx"); remove(mcps_fin2)
+
+#### Table  3: Excess risk (deaths at 40-74y)----------- ####
 #1. RR Prediabetes
 RR.1A <- (m2_adj1$coefficients[1])  %>% exp; RR.1B <- (m3_adj1$coefficients[1])  %>% exp #All-cause
 RR.2A <- (c1$coefficients[1])  %>% exp; RR.2B <- (c2$coefficients[1])  %>% exp #Cardiac
